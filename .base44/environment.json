@@ -1,0 +1,13 @@
+{
+  "previewPort": 3000,
+  "healthPath": "/up",
+  "startCommand": "docker compose -f docker-compose.base44.yml up -d",
+  "secrets": [
+    {
+      "name": "APP_KEY",
+      "description": "Laravel encryption key. Generate one with `php artisan key:generate --show` (format `base64:...`). A development placeholder is used until replaced.",
+      "requiredAtBoot": true,
+      "generatedForDevelopment": true
+    }
+  ]
+}

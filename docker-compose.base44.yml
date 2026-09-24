@@ -1,0 +1,65 @@
+# Base44 dev environment for this Laravel 11 + Breeze app.
+# - app:   `php artisan serve` from the bind-mounted source (host port 3000 = preview)
+# - vite:  Vite dev server with HMR (host port 5173, loaded by the browser via public/hot)
+# - setup: one-shot composer install + SQLite migrate (+ seed on first creation)
+x-php: &php
+  image: base44-laravel-php:8.3
+  build:
+    context: ./.base44
+    dockerfile: php.Dockerfile
+  working_dir: /var/www/html
+  entrypoint: ["sh", ".base44/with-app-key.sh"]
+  volumes:
+    - ./:/var/www/html
+  env_file:
+    - ./.env.base44-defaults
+    - /run/base44/app.env
+
+services:
+  setup:
+    <<: *php
+    command:
+      - sh
+      - -c
+      - >
+        composer install --no-interaction --prefer-dist &&
+        if [ ! -f database/database.sqlite ]; then
+          touch database/database.sqlite && php artisan migrate --force --seed;
+        else
+          php artisan migrate --force;
+        fi
+
+  app:
+    <<: *php
+    command: ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
+    ports:
+      - "3000:8000"
+    environment:
+      - APP_URL=https://3000-${BASE44_PUBLIC_HOST_SUFFIX}
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+      vite:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1:8000/up') === false ? 1 : 0);"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  vite:
+    image: node:22
+    working_dir: /app
+    volumes:
+      - ./:/app
+    command: sh -c "npm ci && npm run dev"
+    ports:
+      - "5173:5173"
+    environment:
+      - BASE44_PUBLIC_HOST_SUFFIX
+      - CHOKIDAR_USEPOLLING=true
+    healthcheck:
+      test: ["CMD-SHELL", "test -f public/hot"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
